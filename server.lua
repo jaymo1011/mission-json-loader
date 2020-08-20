@@ -1,6 +1,7 @@
 local hasAnyUGCDirectives = false
 local foundMapDirectiveData = false
 local mapDirectiveDataType = false
+local defaultFallbackUrl = "https://prod.cloud.rockstargames.com/ugc/gta5mission/0000/vyTABS5xR06--t_w6e9t0w/0_0_en.json" -- Stunt - Chiliad
 
 AddEventHandler("onMapStart", function(mapName)
 	-- Save the name of the current resource as we can't get it from getMapDirectives
@@ -31,7 +32,7 @@ AddEventHandler('getMapDirectives', function(add)
 		mapDirectiveDataType = "raw"
 		hasAnyUGCDirectives = true
     end, function()
-        -- We actually don't need to delete anything from state as thats handled when maps are loaded...
+        -- We actually don't need to delete anything from state as that's handled when maps are loaded...
 	end)
 
 	-- A file name pointing to a file containing MissionJSON
@@ -62,16 +63,22 @@ AddEventHandler('getMapDirectives', function(add)
 		hasAnyUGCDirectives = true
 	end, function() end)
 
-	-- The surrogate resource for whatever the outcome of the map voting was if it wasn't a discrete resource, usually a (cached) rockstar URL
+	-- This is the same as a URL but we get it from a variable in GlobalState so that it can be changed in accordance with an external voting system.
 	add('missionjson_surrogate', function(state, acknowledgement)
 		-- Only accept one of any type
 		if hasAnyUGCDirectives then return end
 		
 		-- Stop stupid people from being stupid
-		if acknowledgement ~= "Yes, I understand that surrogate maps are only used by jaymo's racing gamemode and that I can't just make my own because that's not the purpose of a surrogate map." then return end
+		if acknowledgement ~= "Yes, I understand that what surrogate maps are and that I shouldn't be using this map directive if I don't." then return end
+
+		-- Save the URL from GlobalState or use the fallback
+		local url = GlobalState.MissionJSONLoaderSurrogateURL or GetConvar("missionJsonLoader_surrogateFallbackUrl", defaultFallbackUrl)
+
+		-- This directive can only be a string
+		if type(url) ~= "string" then return end
 		
-		-- Processed as part of the surrogate map start
-		mapDirectiveDataType = "surrogate"
+		foundMapDirectiveData = url
+		mapDirectiveDataType = "url"
 		hasAnyUGCDirectives = true
 	end, function() end)
 end)
@@ -107,11 +114,6 @@ AddEventHandler("onServerResourceStart", function(resourceName)
 			else
 				ok = false
 			end
-		elseif mapDirectiveDataType == "surrogate" then
-			-- This is the same as a URL but we get it from an export in racing.
-			-- If racing isn't present or there is no URL in the export then something must have gone wrong and we'll tell mapmanager to get us a new map.
-			print("surrogate maps aren't implemented yet as the voting system isn't implemented!")
-			ok = false
 		end
 
 		if not ok then
@@ -124,6 +126,4 @@ AddEventHandler("onServerResourceStart", function(resourceName)
 
 	-- Update the polling variable for connected clients, connecting clients will just be able to load it as it will be part of state!
 	GlobalState.CurrentMapMissionJSONChecked = true
-
-	print("map loading was oki doki? " .. ((not not GlobalState.CurrentMapMissionJSON) and "yes" or "no")) -- thanks lua syntax, very cool :^)
 end)

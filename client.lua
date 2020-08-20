@@ -1,5 +1,4 @@
 local loadedUGC = {}
-local firstMapLoad = true
 
 local function Vector3FromTable(arr)
 	return vec3(arr.x, arr.y, arr.z)
@@ -82,15 +81,11 @@ do
 end
 
 local function LoadUGC(ugc)
-	-- I'll add a spinner lib at some point
-	--[[
-	BeginTextCommandBusyString("STRING")
-        AddTextComponentSubstringPlayerName("Loading Map Objects")
-	EndTextCommandBusyString(2)
-	]]
-
 	-- Set the flag so the server knows we're loading stuff right now.
 	LocalPlayer.state:set("MissionJSONLoaded", false, true)
+
+	-- Clear out the our GlobalState var containing the currently loaded UGC
+	GlobalState:set("CurrentMapUGC", false, false)
 
 	print("Loading UGC...")
 
@@ -117,8 +112,8 @@ local function LoadUGC(ugc)
 	for i=1, objectData["no"] do
 		local model = modelArr[i]
 		local heading = headingArr[i]
-		local location = locationArr[i]; location = vec3(location.x, location.y, location.z)
-		local rotation = rotationArr[i]; rotation = vec3(rotation.x, rotation.y, rotation.z)
+		local location = locationArr[i]; location = Vector3FromTable(location)
+		local rotation = rotationArr[i]; rotation = Vector3FromTable(rotation)
 
 		-- Request model and wait (if it exists!)
 		if not IsModelInCdimage(model) then return end; RequestModel(model); while not HasModelLoaded(model) do Wait(0) end
@@ -166,22 +161,6 @@ local function LoadUGC(ugc)
 	print("Done loading UGC!")
 end
 
---[[ Thanks GlobalState!!!
-RegisterNetEvent("UGCLoader:LoadFromRetrievedData")
-AddEventHandler("UGCLoader:LoadFromRetrievedData", function(resource, ugcData)
-	-- This would be a shame!
-	if loadedUGC[resource] then
-		UnloadUGC(loadedUGC[resource])
-		loadedUGC[resource] = nil
-	end
-
-	-- Save the data to be able to unload it later
-	loadedUGC[resource] = {data = ugcData}
-
-	-- Call the loader function
-	LoadUGC(loadedUGC[resource])
-end)]]
-
 local function UnloadUGC(ugc)
 	if ugc.objects then
 		for _, objectHandle in ipairs(ugc.objects) do
@@ -202,20 +181,21 @@ AddEventHandler("onClientMapStart", function(resource)
 
 	-- Well, if we've made this this far, this is almost certainly MissionJSON, lets parse it!
 	loadedUGC[resource] = {data = ParseMissionJSON(GlobalState.CurrentMapMissionJSON)}
+ 
+	-- Trigger an event for other resources
+	TriggerEvent("onMissionJSONLoading")
 
 	-- And now we load it! (if it worked correctly)
 	LoadUGC(loadedUGC[resource])
 
+	-- Now that it's parsed, we'll add it to our *local* GlobalState (no replication!)
+	GlobalState:set("CurrentMapUGC", loadedUGC[resource], false)
+
 	-- Then finally, we update the LocalPlayer state to tell the server we've loaded! (by setting the loaded map to the resource name so it doesn't get confused)
 	LocalPlayer.state:set("MissionJSONLoaded", resource, true)
 
-	-- DEBUG SPAWN MEMEING
-	local spawnLocation = Vector3FromTable(loadedUGC[resource].data["mission"]["race"]["scene"]) or vec3(345, 4842, -60)
-	exports["spawnmanager"]:spawnPlayer({
-		x = spawnLocation.x, y = spawnLocation.y, z = spawnLocation.z,
-		heading = 39.3,
-		model = `a_m_y_skater_02`,
-	})
+	-- Trigger an event for other resources
+	TriggerEvent("onMissionJSONLoaded")
 end)
 
 AddEventHandler("onClientMapStop", function(resource)
