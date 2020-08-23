@@ -1,9 +1,5 @@
 local loadedUGC = {}
 
-local function Vector3FromTable(arr)
-	return vec3(arr.x, arr.y, arr.z)
-end
-
 local GetPropSpeedModificationParameters
 
 do
@@ -84,9 +80,6 @@ local function LoadUGC(ugc)
 	-- Set the flag so the server knows we're loading stuff right now.
 	LocalPlayer.state:set("MissionJSONLoaded", false, true)
 
-	-- Clear out the our GlobalState var containing the currently loaded UGC
-	GlobalState:set("CurrentMapUGC", false, false)
-
 	print("Loading UGC...")
 
 	ugc.objects = {}
@@ -112,8 +105,8 @@ local function LoadUGC(ugc)
 	for i=1, objectData["no"] do
 		local model = modelArr[i]
 		local heading = headingArr[i]
-		local location = locationArr[i]; location = Vector3FromTable(location)
-		local rotation = rotationArr[i]; rotation = Vector3FromTable(rotation)
+		local location = locationArr[i]--; location = Vector3FromTable(location)
+		local rotation = rotationArr[i]--; rotation = Vector3FromTable(rotation)
 
 		-- Request model and wait (if it exists!)
 		if not IsModelInCdimage(model) then return end; RequestModel(model); while not HasModelLoaded(model) do Wait(0) end
@@ -176,22 +169,22 @@ AddEventHandler("onClientMapStart", function(resource)
 		while CheckForMissionJSONTimeout > GetGameTimer() and not GlobalState.CurrentMapMissionJSONChecked do Wait(500) end
 	end
 
-	-- If the current map actually has nothing to do with MissionJSON, don't bother doing anything...
-	if not SeemsLikeValidMissionJSON(GlobalState.CurrentMapMissionJSON) then return end
+	-- Grab CurrentMapUGC from GlobalState
+	local mapUGC = GlobalState.CurrentMapUGC
 
-	-- Well, if we've made this this far, this is almost certainly MissionJSON, lets parse it!
-	loadedUGC[resource] = {data = ParseMissionJSON(GlobalState.CurrentMapMissionJSON)}
+	-- If the current map actually is not actually properly parsed UGC, don't do anything with it
+	if not IsValidUGC(mapUGC) then return end
+
+	-- Well, if we've made this this far, this is almost certainly a valid map, lets use it!
+	loadedUGC[resource] = {data = mapUGC}
  
 	-- Trigger an event for other resources
 	TriggerEvent("onMissionJSONLoading")
 
-	-- And now we load it! (if it worked correctly)
+	-- And now we load it!
 	LoadUGC(loadedUGC[resource])
 
-	-- Now that it's parsed, we'll add it to our *local* GlobalState (no replication!)
-	GlobalState:set("CurrentMapUGC", loadedUGC[resource], false)
-
-	-- Then finally, we update the LocalPlayer state to tell the server we've loaded! (by setting the loaded map to the resource name so it doesn't get confused)
+	-- Finally, we update the LocalPlayer state to tell the server we've loaded! (by setting the loaded map to the resource name so it doesn't get confused)
 	LocalPlayer.state:set("MissionJSONLoaded", resource, true)
 
 	-- Trigger an event for other resources

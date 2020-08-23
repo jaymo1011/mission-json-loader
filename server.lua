@@ -89,39 +89,53 @@ AddEventHandler("onServerResourceStart", function(resourceName)
 
 	-- Once we've processed directives, get our MissionJSON string and update the GlobalState for clients to have fun with (om nom nom)
 	if hasAnyUGCDirectives then
-		local ok = true
+		-- Make a variable to save the JSON for server-side processing
+		local MissionJSON = false
 
 		-- Process whatever data we got depending on the directive type
 		if mapDirectiveDataType == "raw" and foundMapDirectiveData then
 			-- The easiest type to deal with, just chuck it on GlobalState and it can cause errors if whoever set the map up was stupid.
-			GlobalState.CurrentMapMissionJSON = foundMapDirectiveData
+			MissionJSON = foundMapDirectiveData
 		elseif mapDirectiveDataType == "resourcefile" and foundMapDirectiveData then
 			-- Seeing as we have the resource name, it's trivial to just grab the file.
 			local fileContent = LoadResourceFile(resourceName, foundMapDirectiveData)
 
 			-- If the file is empty or there wasn't a file to begin with, something went wrong.
 			if fileContent ~= nil and fileContent ~= "" then 
-				GlobalState.CurrentMapMissionJSON = fileContent
-			else
-				ok = false 
+				MissionJSON = fileContent
 			end
 		elseif mapDirectiveDataType == "url" and foundMapDirectiveData then
 			-- We have a nice little function to get and cache URLs so we'll just call that.
 			local urlContent = GetUGCURLContent(foundMapDirectiveData)
 
+			-- If there is no url content returned, something went wrong
 			if urlContent then
-				GlobalState.CurrentMapMissionJSON = urlContent
-			else
-				ok = false
+				MissionJSON = urlContent
 			end
 		end
 
-		if not ok then
+		-- Process the MissionJSON if its a truthy value otherwise, provide a detailed error
+		if MissionJSON then
+			local parserOutput, err = ParseMissionJSON(MissionJSON)
+			if type(parserOutput) == "table" then
+				-- Put the parsed table directly on GlobalState. Why wasn't I doing this before? I don't know.
+				GlobalState.CurrentMapUGC = parserOutput
+			else
+				print(string.format(
+					"MissionJSONLoader: The map %s contained or pointed to MissionJSON that we were unable to process.%s", 
+					resourceName, 
+					err and ("\nParser Error: "..err) or ""
+				))
+			end
+		else
 			-- It may have a directive but we couldn't get the data, oh well..
-			GlobalState.CurrentMapMissionJSON = false
+			print(string.format(
+				"MissionJSONLoader: The map %s contained a MissionJSON map directive but we were unable to retrieve it.\n\tType: %s\n\tData: %s", 
+				resourceName, 
+				mapDirectiveDataType, 
+				foundMapDirectiveData
+			))
 		end
-	else
-		GlobalState.CurrentMapMissionJSON = false
 	end
 
 	-- Update the polling variable for connected clients, connecting clients will just be able to load it as it will be part of state!
