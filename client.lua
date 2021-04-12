@@ -132,7 +132,7 @@ local function LoadUGC(ugc)
 		if lodDistArr then
 			local lodDistance = lodDistArr[i]
 			if lodDistance ~= -1 then
-				SetEntityLodDist(newObj, textureVariant)
+				SetEntityLodDist(newObj, lodDistance)
 			end
 		end
 
